@@ -1,118 +1,138 @@
-# Architecture and engineering decisions
+# How ProjectR works
 
-This document describes the commercial application's inspected implementation. Source filenames and type names identify the basis for the description; those source files are not distributed in this showcase.
+This document explains the app’s current implementation, including the parts that still need work. The type and file names below refer to the private application; their source is not included in this showcase.
 
-## Boundaries and state ownership
+## App structure
 
-ProjectR has one native application target. Its architecture uses an observable application store, value-based domain models, SwiftUI presentation, and concrete service objects. The boundaries below are logical, not independent Swift packages.
+ProjectR uses one native Xcode application target. Game rules, state management, drawing, and Apple services are separated by types and files within that target, rather than independent Swift packages.
 
-| Responsibility | Types and original source locations |
+| Part of the app | Types and source files |
 | --- | --- |
-| Application state and coordination | GameStore in ProjectRApp.swift |
-| Career rules and race data | Career, RaceSession, LapFrame, Setup in GameModel.swift |
-| Weekend planning and progression | WeekendPlan, RaceStrategy, PitWallState and model extensions in WorldTour.swift |
-| Traffic and overtaking | TrafficInput, TrafficPhase, TrafficRun, TrafficCache in GameModel.swift |
-| Track geometry | CircuitGeometry and GeometryCache in CircuitGeometry.swift; route catalog in CircuitCatalog.swift |
-| Screens and playback state | RaceView and RacePlaybackState in RaceViews.swift |
-| Drawing and scenery caching | CircuitArtwork and CircuitTextureCache in Artwork.swift |
-| Cloud, identity, and achievements | AppleServices in AppleServices.swift; CareerSnapshot and SyncDecision in SyncModel.swift |
-| Purchase ownership | ExpansionStore in ExpansionStore.swift; implementation withheld |
+| Shared state and coordination | `GameStore` in `ProjectRApp.swift` |
+| Career rules and race data | `Career`, `RaceSession`, `LapFrame`, `Setup` in `GameModel.swift` |
+| Weekend planning and progression | `WeekendPlan`, `RaceStrategy`, `PitWallState` and extensions in `WorldTour.swift` |
+| Traffic and overtaking | `TrafficInput`, `TrafficPhase`, `TrafficRun`, `TrafficCache` in `GameModel.swift` |
+| Circuit geometry | `CircuitGeometry` and `GeometryCache` in `CircuitGeometry.swift`; `CircuitCatalog.swift` |
+| Race screens and playback state | `RaceView` and `RacePlaybackState` in `RaceViews.swift` |
+| Drawing and scenery caching | `CircuitArtwork` and `CircuitTextureCache` in `Artwork.swift` |
+| Cloud saves, identity, and achievements | `AppleServices` in `AppleServices.swift`; `CareerSnapshot` and `SyncDecision` in `SyncModel.swift` |
+| Purchase ownership | `ExpansionStore` in `ExpansionStore.swift` |
 
-SwiftUI receives GameStore through the environment. GameStore is main-actor isolated and observable. Career and RaceSession carry domain state as value types, while view-local state handles presentation concerns. The model harness compiles without SwiftUI, although geometry types remain a dependency.
+SwiftUI receives the observable, main-actor-isolated `GameStore` through the environment. `Career` and `RaceSession` are value types holding game data and rules. Views keep presentation state locally. The model files compile into a test executable without SwiftUI, although they still use Foundation and geometry types.
 
-This is not presented as formal Clean Architecture, reducer-based state management, or a fully modular engine. Concrete service construction and large model files make a small project direct to navigate, but limit substitution and independent ownership.
+```mermaid
+flowchart TD
+    UI[SwiftUI screens] --> Store[Main-actor observable GameStore]
+    Store --> Domain[Career and RaceSession value models]
+    Store --> Work[Background snapshot calculation]
+    Work --> Commit[Revision check]
+    Commit --> Store
+    Domain --> Race[Seeded pace and strategy calculation]
+    Race --> Traffic[Fixed-step traffic model]
+    Traffic --> Frames[Timing and interpolated positions]
+    Frames --> Render[SwiftUI Canvas]
+    Geometry[Circuit geometry and lookup tables] --> Traffic
+    Geometry --> Render
+    Store --> Local[Validated JSON saves]
+    Store --> Services[Apple service objects]
+    Services --> Apple[CloudKit / GameKit / StoreKit 2]
+```
 
-## Three stages of racing
+The store uses concrete service objects, and several model files are large. This keeps related work together but makes replacing dependencies for tests harder. The app has logical layers, not enforced package boundaries or a separate engine module.
 
-### 1. Intended pace and strategy
+## From race preparation to moving cars
 
-Career.qualify produces qualifying order and per-lap cumulative timing. Inputs include car performance and condition, setup, driver attributes and preparation, tire degradation, selected difficulty, conditions, and seeded variation.
+### Pace and strategy
 
-RivalRaceStrategy retains distinct team profiles and stint decisions. Strategy planning uses cost estimates; higher difficulty evaluates candidate thresholds. RivalDevelopment carries component development across championship weekends. Driver growth combines race experience, training focus, and development milestones.
+`Career.qualify` produces the grid and cumulative lap times. Car performance and condition, setup, driver attributes and preparation, tires, difficulty, conditions, and seeded variation all contribute.
 
-These are domain rules and heuristic planning, not machine learning or a physically complete car model. Weather is selected for a race weekend rather than continuously simulated.
+`RivalRaceStrategy` keeps distinct team profiles and estimates the cost of different stints. Hard difficulty evaluates candidate pit thresholds. `RivalDevelopment` retains component development across championship weekends, while driver growth uses experience, training, and milestone traits.
 
-### 2. Spatial traffic
+Opponent behavior is rule-based, with no machine-learning model. Weather is selected for the weekend rather than changing continuously during a race.
 
-TrafficRun turns intended durations and pit schedules into a sampled ten-car race. It advances at a fixed 0.25-second simulation step. Its finite-state model covers following, seeking an opening, pulling out, running alongside, merging, abandoning an attempt, and pitting.
+### Traffic
 
-Road width and bend lookahead constrain passing opportunities. Nearby cars influence lane choice, longitudinal separation, steering, braking, and merge safety. Pit service participates in traffic movement. Finish-line crossing times feed future classification frames through RaceSession.applyTraffic.
+`TrafficRun` takes intended lap durations and pit schedules and simulates ten cars at a fixed **0.25-second step**. Cars move through states for following, seeking an opening, pulling out, running alongside, merging, abandoning a pass, and pitting.
 
-The implementation is an arcade traffic simulation with tuned constraints. It is not a rigid-body physics engine or a formal collision-free proof for arbitrary inputs.
+Road width and upcoming bends determine where a pass is possible. Nearby cars affect lane choice, spacing, braking, steering, and merging. Pit service is part of this movement. `RaceSession.applyTraffic` uses finish-line crossing times to update future classification frames, so traffic affects results as well as appearance.
 
-### 3. Playback and presentation
+This is an arcade model built from tuned rules and constraints, rather than a full vehicle-physics simulation. The regression sweeps exercise spacing and movement but cannot prove correctness for every possible input.
 
-TrafficRun.at interpolates stored samples for display. RaceSession.positions maps playback progress to model time and car positions. The main race uses a Combine timer and monotonic elapsed time; it does not run the full race calculation at display cadence.
+### Playback
 
-TimelineView supplies workshop, guide, and podium animation schedules where used. The requested scheduling intervals are not measured frame-rate guarantees.
+`TrafficRun.at` interpolates between traffic samples. `RaceSession.positions` maps playback progress to model time and car positions. A Combine timer advances the race display using monotonic elapsed time; it does not recalculate the entire simulation on each display update.
 
-## Strategy changes without rerolling
+TimelineView supplies animation schedules for the workshop, circuit guide, and podium where used. Display scheduling and the traffic timestep are separate. Requested update intervals do not establish a measured frame rate.
 
-PitWallState keeps baseline frames and the evolving stop/order plan. RaceSession.queue, advanceStrategyLap, and rebuildStints apply commands and recompute future stint effects. Revealed lap frames remain intact. Persisted rival plans and baseline incidents avoid a fresh random draw when the player changes strategy.
+## Changing strategy during a race
 
-This makes an interrupted weekend resumable and prevents strategy controls from becoming a way to repeatedly roll for better results. It does not promise cross-version reconstruction solely from a random seed: generated frames, strategies, and traffic inputs are the persisted replay material.
+`PitWallState` retains baseline frames alongside the stop and command plan. `RaceSession.queue`, `advanceStrategyLap`, and `rebuildStints` update future stint effects while keeping revealed laps intact. Rival plans and baseline incidents are retained rather than randomly regenerated after each command.
 
-## Concurrency: calculate, validate, commit
+Saved sessions keep generated frames, strategies, and traffic inputs. They can resume without rerolling the weekend, but they are not a seed-only replay format that guarantees reconstruction across app versions.
 
-GameStore.qualifyWeekend and editRace take value snapshots and perform CPU work using detached tasks. On completion, the main-actor store compares its current revision with the revision captured when work started. An obsolete result is rejected rather than overwriting newer career state.
+## Background work and state checks
 
-Different guards address different failure modes:
+`GameStore.qualifyWeekend` and `editRace` copy their inputs and run CPU work in detached tasks. When the work finishes, the main-actor store accepts it only if the career revision still matches the one captured at the start.
 
-| Mechanism | Purpose |
+Different checks cover different situations:
+
+| Mechanism | What it prevents or reduces |
 | --- | --- |
-| Main-actor observable state | Serializes access to application and presentation state |
-| Preparation gate | Prevents overlapping race preparation/edit operations |
-| Career revision | Rejects stale background calculations |
-| Cloud operation gate | Prevents overlapping synchronization decisions |
-| Account-generation token | Ignores obsolete cloud responses after account/state changes |
-| Game Center player checks | Avoids applying a response to a different authenticated player |
-| Cancellable debounce tasks | Coalesces local-save and achievement synchronization requests |
-| NSLock-protected caches | Synchronizes shared geometry and traffic cache dictionaries |
+| Main-actor state | Concurrent access to isolated application and presentation state |
+| Preparation gate | Overlapping race preparation or editing |
+| Career revision | Applying an old calculation after the career has changed |
+| Cloud operation gate | Overlapping sync decisions |
+| Account-generation checks | Applying cloud responses from an earlier account or sync session |
+| Game Center player checks | Applying achievement responses to a different authenticated player |
+| Cancellable debounce tasks | Repeated sync requests after closely spaced local changes |
+| NSLock-protected caches | Concurrent dictionary access in shared geometry and traffic caches |
 
-Main-actor isolation alone is not enough: asynchronous functions can suspend and allow intervening changes. Revision and identity checks address that logical reentrancy.
+Main-actor code can still suspend at an await, allowing other changes before it resumes. That is why revision and identity checks are needed as well as actor isolation.
 
-The caches build expensive values outside locks and recheck before insertion. This shortens lock ownership but allows duplicate computation on simultaneous misses. The project uses Swift 5 language mode; it is not claimed to have fully enforced Swift 6 strict-concurrency isolation. There are no custom actor types in the inspected application.
+The caches do expensive construction outside their locks, then recheck before inserting. This avoids holding a lock during calculation, but two simultaneous misses can do duplicate work. The project uses Swift 5 language mode and has not had a complete Swift 6 strict-concurrency audit. There are no custom actor types in the app.
 
-## Rendering and memory tradeoffs
+## Drawing and caching
 
-CircuitGeometry rounds authored corners and creates approximately equal-distance route samples. Geometry and width tables are initialized lazily. Traffic runs precompute bend and passing-opening lookups to avoid repeated work in the simulation loop.
+`CircuitGeometry` rounds authored corners and creates approximately equal-distance samples around each route. Geometry and width tables are built lazily. Traffic runs precompute bend and passing-opening lookups for use in their simulation loops.
 
-CircuitArtwork separates static scenery from the car Canvas. CircuitTextureCache rasterizes scenery through ImageRenderer and uses NSCache with a configured 24 MiB cost limit and 16-image count limit. Recent traffic samples are retained in a three-run cache. HUD observation uses coarser progress updates than car playback.
+`CircuitArtwork` separates scenery from the moving-car Canvas. `CircuitTextureCache` renders static scenery with ImageRenderer and stores it in NSCache, configured for 24 MiB of cost and 16 images. A separate cache retains three recent traffic runs. Car playback updates more often than the HUD’s coarser progress values.
 
-These techniques reduce repeated preparation and drawing. Tradeoffs include the memory cost of full-race traffic samples, possible first-use rasterization work on the main actor, retained geometry tables, and advisory rather than hard NSCache limits. No sustained-device-FPS or battery claim is made.
+The tradeoffs are memory for full-race samples and retained geometry tables, possible first-use scenery work on the main actor, and NSCache limits that guide eviction rather than enforce a hard memory ceiling. Device frame-time and battery profiling are still needed.
 
-## Career storage and cloud reconciliation
+## Local saves and CloudKit
 
-Careers are Codable JSON snapshots. Validation checks supported formats, ranges, identities, finite timing values, and race/progression structure. Supported migrations retain compatibility. Disk writes use atomic replacement and iOS file protection. A cloud restore validates the replacement and backs up the existing local file first.
+Careers use Codable JSON. Loading validates supported formats, ranges, identities, finite timing values, and race/progression structure, then applies supported migrations. Writes use atomic file replacement and iOS file protection. Before restoring a cloud career, the app validates it and backs up the current local file.
 
-Cloud synchronization uses a private CloudKit database. SHA-256 hashes cover normalized, sorted-key career JSON; snapshot timestamps and device descriptions are not the comparison payload.
+Optional sync uses a private CloudKit database. SHA-256 hashes compare normalized, sorted-key career JSON; snapshot timestamps and device descriptions are excluded from that comparison. The baseline represents the last career shared by the device and cloud.
 
-| Comparison with the last shared baseline | Action |
+| Save comparison | Action |
 | --- | --- |
 | Local and remote match | No transfer |
 | Only local exists | Upload |
 | Only remote exists | Download |
 | Both exist without a baseline | Ask the player |
-| Only local changed | Upload |
-| Only remote changed | Download, subject to active-race protection |
-| Both changed | Ask the player |
+| Only local changed from the baseline | Upload |
+| Only remote changed from the baseline | Download, subject to active-race protection |
+| Both changed from the baseline | Ask the player |
 
-Before accepting a choice, AppleServices.resolve checks the local hash, fetches the current server record, checks the local hash again after suspension, and compares server record change tags. Uploads use conditional record writes. A server conflict causes another review rather than an unconditional overwrite.
+Before applying a choice, `AppleServices.resolve` checks the local hash, fetches the latest cloud record, checks the local hash again, and compares server record change tags. Uploads use conditional writes. If another device changed the record, the player needs to review the saves again.
 
-This is whole-career selection, not field-level merging or timestamp-based last-write-wins. SHA-256 is a change fingerprint, not encryption, a signature, or an anti-cheat boundary.
+The app selects a whole career rather than merging individual fields or choosing by timestamp. SHA-256 detects content changes; it does not encrypt or authenticate a save.
 
-## Apple service boundaries
+## Apple services
 
-StoreKit 2 manages non-consumable ownership with verified transactions, entitlement refresh, update handling, and restoration. GameKit manages authentication and monotonic achievement reporting. AuthenticationServices supplies an optional Apple profile stored in Keychain. Cloud synchronization uses the iCloud account independently of that profile.
+StoreKit 2 handles the non-consumable expansion through verified transactions, current entitlements, transaction updates, revocation-aware access, and restoration. GameKit authentication is refreshed from current player state at launch and on returning to the app. Achievement reporting checks the player account and only increases platform progress. Optional Sign in with Apple stores a local profile in Keychain.
 
-Public documentation describes capabilities only. Product identifiers, production configuration, purchase logic, and account-management implementation are not included in this repository.
+The iCloud account, Game Center player, and optional Apple profile have separate roles. They are not a custom unified account system. Purchase implementation and production configuration remain outside this repository.
 
-## Reliability limits and next engineering steps
+## Limits and possible next steps
 
-- Resume returns to successfully saved checkpoints; the view's within-lap playback fraction is not persisted.
-- Failed local writes report an error but do not roll back the in-memory career.
-- Unreadable files are preserved on a best-effort basis; there is no automatic backup-selection interface.
-- Optional cloud operations can retry on later activity, but there is no durable background synchronization worker.
-- Whole-career storage and bounded cloud snapshot size need continued evaluation as careers grow.
-- Service protocols and injectable transports would enable automated fault-injection tests.
-- Strict-concurrency auditing and physical-device profiling would strengthen evidence beyond the current model harness.
+- Resuming uses the last successfully saved checkpoint; within-lap view progress is not persisted.
+- A failed local write shows an error but does not roll back the in-memory career.
+- Unreadable files are preserved on a best-effort basis. There is no automatic backup-selection screen.
+- Cloud sync retries on later app activity; it has no durable background worker.
+- Growing career files need continued evaluation against the cloud snapshot size limit.
+- Injectable service interfaces would make network and transaction failure tests easier to automate.
+- Strict-concurrency checks, lifecycle/UI tests, and physical-device profiling would add coverage beyond the model harness.
+
+These are limitations and possible improvements, not completed work.

@@ -4,103 +4,15 @@
 
 # ProjectR: Racing Manager
 
-**A published native iOS game with a custom Swift racing simulation.**
+I’m [John Money](https://github.com/MoneyJohn), a Computer Engineering student. ProjectR is my personal iOS racing management project, now available on the App Store. You run a racing team: choose a car and driver, plan tire stops, make calls during a race, and work through championships.
 
-Built and released by [John Money](https://github.com/MoneyJohn). ProjectR combines racing strategy and long-term team management: prepare a driver and car, plan tire stints, respond from the pit wall, and progress through regional championships.
-
-[Download on the Apple App Store](https://apps.apple.com/us/app/projectr-racing-manager/id6830888927) · [Architecture](docs/ARCHITECTURE.md) · [Testing](docs/TESTING.md)
-
-This repository is an engineering showcase for a commercial application. It contains documentation and selected presentation media; the application source, regression executable, purchase implementation, and production configuration remain private. This is not a buildable distribution of the game.
-
-## Engineering highlights
-
-| Engineering problem | Implementation |
-| --- | --- |
-| Racing decisions need consequences beyond animation | A seeded lap-pace model feeds fixed-step traffic simulation; traffic crossing times contribute to race classification. |
-| Overtakes should respect road width and nearby cars | A finite-state traffic model coordinates following, opening selection, lateral movement, passing, merging, and aborted attempts. |
-| Preparing a race should not block interaction | Background calculation operates on value snapshots; main-actor state accepts results only when the career revision still matches. |
-| Two offline devices can develop different careers | SHA-256 comparison against a shared baseline detects divergence; explicit choices are revalidated before a CloudKit write or restore. |
-| Detailed circuit scenery should not redraw with every moving car | Rasterized static scenery, lazy geometry tables, cached traffic runs, and interpolated movement separate preparation from playback. |
-| A growing world needs repeatable regression coverage | A custom command-line harness exercises seeded scenarios and sampled invariants, with **3,526,424 assertion evaluations** verified in the regression run. |
-
-## Game scope
-
-ProjectR includes **seven racing tours, 64 distinct locations, and 322 scheduled race weekends**.
-
-The tours are Americas, Europe, India, East Asia, Singapore, China, and World Masters. Each tour schedules 46 championship weekends across five cups. World Masters revisits locations from the regional tours, so tour entries are not additional distinct locations. The 322-weekend figure describes the championship schedule, not 322 independent cities or a claim of 322 unique real-world circuits.
-
-The management loop includes car components and condition, driver contracts and growth, tire planning, rivalries, team history, and championship progression. Race-distance preferences support a minimum of 15 laps and circuit-specific maximums up to 72.
-
-## Architecture at a glance
-
-The app is implemented in one native Xcode application target, with logical boundaries between domain models, state coordination, presentation, and Apple services.
-
-```mermaid
-flowchart TD
-    UI[SwiftUI screens] --> Store[Main-actor observable GameStore]
-    Store --> Domain[Career and RaceSession value models]
-    Store --> Work[Detached snapshot computation]
-    Work --> Commit[Revision-checked result]
-    Commit --> Store
-    Domain --> Race[Seeded pace and strategy calculation]
-    Race --> Traffic[Fixed-step traffic model]
-    Traffic --> Frames[Timing and interpolated positions]
-    Frames --> Render[SwiftUI Canvas presentation]
-    Geometry[Circuit geometry and lookup tables] --> Traffic
-    Geometry --> Render
-    Store --> Local[Validated JSON persistence]
-    Store --> Services[Apple service objects]
-    Services --> Apple[CloudKit / GameKit / StoreKit 2]
-```
-
-The model can be compiled into the regression harness without SwiftUI. It uses Foundation and geometry types; it is not a separately shipped engine package. [Read the architecture and tradeoffs →](docs/ARCHITECTURE.md)
-
-## Simulation and opponents
-
-Race preparation combines car performance, setup, driver attributes, preparation, tire wear, conditions, and seeded variation. A separate traffic model simulates spatial interactions and pit service before presentation interpolates the resulting samples.
-
-Opponents use **rule-based strategy and adaptive component development**. Teams retain distinct strategy profiles, evaluate stint costs, and develop hardware according to championship context and selected difficulty. Hard difficulty evaluates candidate pit thresholds. These are authored heuristics and bounded planning routines, not machine-learning models.
-
-Player strategy changes rebuild future stint effects from a retained baseline. Completed lap frames and generated rival plans are preserved instead of rerolling the weekend.
-
-## Rendering and concurrency
-
-- SwiftUI Canvas draws circuits and moving cars. Static scenery is rasterized with ImageRenderer and reused through an image cache.
-- Geometry samples, road widths, and traffic lookups reduce repeated preparation work. A bounded cache retains recent traffic runs.
-- Main race playback uses a Combine timer and monotonic elapsed time. Workshop and podium animations use TimelineView.
-- Fixed simulation steps are independent of display scheduling; interpolation supplies intermediate car positions.
-- Observable playback state separates frequent car updates from coarser HUD updates.
-- Main-actor state ownership, operation gates, revision checks, account-generation checks, and synchronized caches address different concurrency hazards.
-
-These are implemented optimization techniques, not a claim of a measured or sustained display frame rate.
-
-## Persistence and Apple services
-
-**Career integrity.** Codable JSON persistence uses validation, supported-save migrations, atomic file replacement, and pre-restore backups. Interrupted races retain generated timing and strategy inputs. Recovery has limits: the app preserves unreadable files but does not provide a fully automatic backup recovery system.
-
-**CloudKit.** Optional private-database synchronization compares normalized career hashes against the last shared baseline. Divergent careers require a player choice. Before applying it, the app rechecks local content and the server record version; uploads use conditional writes. SHA-256 is used for change detection, not encryption or anti-cheat authentication.
-
-**StoreKit 2.** The app integrates verified transactions, current entitlements, transaction updates, revocation-aware access, and explicit restoration for a non-consumable expansion. Purchase entitlement and championship progression are separate concerns. The commercial purchase implementation is not included here.
-
-**GameKit and AuthenticationServices.** Game Center authentication is refreshed from current framework state; achievement reporting is monotonic and account-aware. Optional Sign in with Apple stores the local profile in Keychain. These services do not form a custom developer-hosted account backend.
-
-## Regression testing
-
-The private project has a custom Swift executable harness that compiles the production model and geometry files with optimization, then checks gameplay scenarios and sampled invariants.
-
-The verified run passed **3,526,424 assertion evaluations**. Roughly 88% come from four road-geometry invariants evaluated repeatedly across sampled points. Additional coverage includes seeded race reproducibility, strategy edits, traffic spacing, career serialization, migrations, progression, driver development, achievement eligibility, and reset-file policy.
-
-This total is a count of assertion evaluations, not independent test cases. The showcase does not include the harness or provide a public CI run. Apple-service integration and physical-device behavior require separate testing. [Read how the harness works →](docs/TESTING.md)
-
-## Gameplay screenshots
-
-Selected native simulator captures in branded presentation frames. These show the actual app UI; they are not physical-device captures or video evidence of animation performance.
+**[Download ProjectR on the App Store](https://apps.apple.com/us/app/projectr-racing-manager/id6830888927)**
 
 <table>
   <tr>
-    <th>Race traffic and pit wall</th>
-    <th>Pre-race strategy</th>
-    <th>Circuit geometry and scenery</th>
+    <th>Race and pit wall</th>
+    <th>Plan your strategy</th>
+    <th>Explore circuits</th>
   </tr>
   <tr>
     <td><img src="assets/screenshots/san-francisco-race.png" width="245" alt="San Francisco race screen showing cars, lap progress, and pit-wall commands"></td>
@@ -109,14 +21,63 @@ Selected native simulator captures in branded presentation frames. These show th
   </tr>
 </table>
 
-## Production delivery
+These are captures of the native app running in the simulator, placed in presentation frames.
 
-ProjectR was built and tested through Xcode, distributed through TestFlight, and published on the Apple App Store. It targets iPhone on iOS 17 and later. Apple-service configuration and store submission materials are kept outside this showcase.
+## The game
 
-**Technology:** Swift · SwiftUI · Swift Concurrency · Observation · Combine · Canvas · TimelineView · CoreGraphics · UIKit · CloudKit · CryptoKit · StoreKit 2 · GameKit · AuthenticationServices · Security/Keychain
+ProjectR is about managing a team over time as well as making decisions during a race. You can:
 
-## Repository scope
+- Develop cars, manage their condition, and choose drivers with different attributes and growth paths.
+- Plan tire compounds and pit stops, then change your approach from the pit wall.
+- Race against teams with different strategies and component development that responds to difficulty and career progress.
+- Build a team history through championships, rivalries, and driver careers.
 
-This is a documentation-first portfolio case study of a commercial application. The application source and private assets are not distributed here. No open-source or asset-reuse license is granted.
+There are **seven racing tours, 64 locations, and 322 scheduled race weekends**. The tours are Americas, Europe, India, East Asia, Singapore, China, and World Masters. Each tour has 46 championship weekends; World Masters revisits locations from the other tours. Race length is configurable, from 15 laps to circuit-specific limits of up to 72.
 
-The technical statements reflect the implementation inspected on **November 18, 2026**. Limitations and evidence boundaries are documented alongside the achievements.
+## How I worked on it
+
+I combined hands-on development with substantial AI-assisted coding. AI coding tools helped implement and revise parts of the app, and I also worked directly on implementation, feature decisions, testing, debugging, iteration, and release management. ProjectR has been a way for me to learn by building and maintaining something people can actually play.
+
+For the initial release, I prioritized gameplay logic and functionality. I took the app through Xcode, TestFlight, and App Store release. I plan to keep improving the UI, animations, and gameplay in future updates.
+
+## How it works
+
+### Racing and opponents
+
+The custom Swift simulation calculates lap pace from the car, driver, setup, tires, and race conditions. A separate traffic model handles following, overtaking, merging, and pit service. Cars look for space based on road width and nearby traffic, and their crossing times affect the results.
+
+Opponents have rule-based strategy profiles and develop components as a career progresses. Difficulty changes their planning and development. When the player changes strategy, future laps are rebuilt from saved baseline data so completed laps and rival plans are preserved.
+
+### Drawing the circuits
+
+SwiftUI Canvas draws the scenery and moving cars. Static scenery is rendered to cached images, while car positions are interpolated between simulation samples. Geometry tables and recent traffic runs are cached too. The main race uses timer-driven playback; TimelineView drives animations such as the workshop and podium.
+
+### Background work and game state
+
+An observable GameStore owns application state on the main actor. Race preparation runs on a background task using a copy of the career. Before applying the result, the store checks that the career has not changed in the meantime, so an older calculation cannot replace newer progress.
+
+### Saving and syncing
+
+Careers are saved locally as validated JSON, with migrations for supported older saves and backups before cloud restoration. Optional CloudKit sync stores the career in the player’s private database.
+
+SHA-256 hashes compare career contents with the last shared baseline. If both devices have changed, the player chooses which career to keep. The app checks local contents and the cloud record version again before applying that choice. The hashes detect changes; they do not encrypt the save.
+
+### Apple services
+
+StoreKit 2 handles verified purchases, ownership updates, and restoration for the one-time expansion. Game Center connects the player and reports achievement progress. Optional Sign in with Apple stores a local profile in Keychain. These features use Apple’s services without a separate developer-hosted account backend.
+
+### Regression checks
+
+A local Swift harness compiles the game models and checks race behavior, strategy changes, saving, progression, and circuit geometry. It combines seeded scenarios with repeated checks across track samples. Apple-service integration, UI behavior, and device performance need separate testing.
+
+[Architecture and tradeoffs](docs/ARCHITECTURE.md) · [How the test harness works](docs/TESTING.md)
+
+## Built with
+
+Swift, SwiftUI, Swift Concurrency, Observation, Combine, Canvas, TimelineView, CoreGraphics, UIKit, CloudKit, CryptoKit, StoreKit 2, GameKit, AuthenticationServices, and Keychain. The app targets iPhone on iOS 17 and later.
+
+## About this repository
+
+This is a documentation showcase and technical overview. It does **not** contain the full commercial source code or a runnable version of the project. The application code, private assets, and production configuration remain private. No open-source or asset-reuse license is granted.
+
+The technical notes describe the implementation reviewed on November 18, 2026.

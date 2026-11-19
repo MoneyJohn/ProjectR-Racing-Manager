@@ -1,75 +1,75 @@
-# Regression testing and evidence
+# How the regression checks work
 
-## What was verified
+## The verified result
 
-The inspected model regression harness completed **3,526,424 assertion evaluations** in a verified run on November 18, 2026. This number counts calls to an assertion helper, not independent test cases, randomized trials, user sessions, or a coverage percentage.
+A local run on **November 18, 2026** completed **3,526,424 assertion evaluations**. That is the number of calls to the harness’s assertion helper, not millions of independently written tests, user sessions, or a coverage percentage.
 
-The commercial source and harness are private. This showcase documents the testing system and verified result; readers cannot build or reproduce the suite from this repository. There is no public CI status badge or public test workflow.
+The application and test sources are private. This document explains the harness and its result, but the suite cannot be built or run from this showcase. There is no public CI workflow.
 
-## How a run starts
+## Starting a run
 
-In the private project, test.sh compiles production model and geometry files together with Tests/main.swift using swiftc with optimization enabled. It then executes the generated command-line program. It does not launch SwiftUI, an iPhone simulator, or Apple-service integration tests.
+In the private project, `test.sh` compiles the production model and geometry files together with `Tests/main.swift`, using `swiftc -O`. It then runs the resulting command-line executable. The suite does not launch SwiftUI or a simulator, and it does not connect to Apple services.
 
-The compiled production files are TeamHistory.swift, CityVenue.swift, CountryModel.swift, WorldTour.swift, GameModel.swift, SyncModel.swift, CircuitCatalog.swift, and CircuitGeometry.swift. Naming these files documents the boundary; their contents are not included here.
+The production files it compiles are `TeamHistory.swift`, `CityVenue.swift`, `CountryModel.swift`, `WorldTour.swift`, `GameModel.swift`, `SyncModel.swift`, `CircuitCatalog.swift`, and `CircuitGeometry.swift`.
 
-The harness's assertion helper increments a counter and terminates on failure. Scenario code creates careers, supplies explicit race seeds, advances/settles sessions, serializes values, and checks expected results. Parameter sweeps repeat assertions over many inputs. Some expensive loops aggregate violations and assert once at the end.
+Each assertion-helper call increments a counter and stops the program if its condition fails. Scenarios create careers, use explicit race seeds, advance and settle races, round-trip saves through JSON, and check the results. Other checks loop over combinations of inputs or sampled points. Some loops collect violations and make one assertion on the total.
 
-## Why the count is 3,526,424
+## Where the count comes from
 
-The original final numerical summary reports 3,526,416 before eight additional career-deletion assertions. A temporary instrumented copy of the harness counted the full execution and recorded **3,526,424**. Application source was not changed for that instrumentation.
+The harness prints a summary at **3,526,416**, then runs eight more career-deletion assertions. A temporary instrumented copy counted the complete run as **3,526,424**. The application source was unchanged by that instrumentation.
 
 | Assertion family | Evaluations |
 | --- | ---: |
-| Sampled road width remains in range | 515,520 |
-| Adjacent width samples transition smoothly | 515,520 |
+| Road width stays in range | 515,520 |
+| Neighboring width samples change smoothly | 515,520 |
 | Both road edges avoid folding backward | 1,031,040 |
-| Both road edges stay within map bounds | 1,031,040 |
-| All other assertion-helper calls | 433,304 |
+| Both road edges stay inside map bounds | 1,031,040 |
+| Other assertion-helper calls | 433,304 |
 | **Total** | **3,526,424** |
 
-The four road families make up approximately 87.7% of the total. They evaluate 720 samples for each of 716 stored geometry entries, including historical compatibility entries. Those entries are not additional advertised locations or race weekends.
+The four road-geometry checks account for about **87.7%** of the total. They run at 720 sample points for each of 716 stored geometry entries, including older layouts kept for save compatibility. Repeating an assertion at many points is useful for finding geometry problems, but it does not mean each evaluation is a separately designed test.
 
-The published game scope is seven tours, 64 distinct locations, and 322 scheduled championship weekends. Retaining older geometry allows previously saved races to keep their route after catalog changes.
+Those stored entries are distinct from the advertised scope of seven tours, 64 locations, and 322 scheduled championship weekends. Older geometry lets an in-progress race keep its route after a catalog update.
 
-## Coverage by engineering concern
+## What gets checked
 
-| Concern | Representative checks |
+| Area | Examples |
 | --- | --- |
-| Economy and settlement | Affordable upgrades, bounded funds/wear, no premature settlement, repeated settlement rejection |
-| Determinism | Equal input and explicit seed produce matching generated timing in tested scenarios |
-| Strategy | Compound selection, early pit calls, stint extension, pending orders, completed-lap preservation |
-| Opponents | Persisted strategy identities, difficulty-dependent planning, bounded hardware development |
-| Driver careers | Experience growth, training, market refresh, retirement, identity persistence |
-| Save integrity | JSON round trips, supported legacy data, malformed snapshot rejection, in-progress route continuity |
-| Cloud policy | Equal/one-sided/divergent baseline decisions, unsupported/oversized/invalid snapshots |
-| Geometry | Lap seam continuity, sampled distance uniformity, coarse segment crossings, width/edge safety |
-| Traffic | Completed/aborted passes, forward progress, lateral smoothness, containment, spacing, pit merges |
-| Progression | Championship gates, exhibitions, achievements, historical credit, career reset file selection |
+| Economy and results | Upgrade costs, bounded funds and wear, unfinished-race rejection, repeated-settlement rejection |
+| Determinism | Matching timing for the same tested inputs and seed |
+| Strategy | Tire changes, early pit calls, stint extension, pending commands, preservation of completed laps |
+| Opponents | Saved strategy profiles, difficulty-dependent planning, bounded component development |
+| Drivers | Experience growth, training, market refresh, retirement, saved identities |
+| Saves | JSON round trips, supported older saves, invalid snapshot rejection, in-progress route compatibility |
+| Cloud decision rules | Equal saves, one-sided changes, divergent changes, invalid and oversized snapshots |
+| Geometry | Lap seams, sample spacing, coarse segment crossings, road widths, edge bounds |
+| Traffic | Passing and abandoned attempts, forward movement, lane smoothness, containment, spacing, pit merges |
+| Progression | Championship gates, exhibitions, achievement eligibility, history, reset-file selection |
 
-Traffic sweeps run sampled races across the stored layouts. They inspect positions and car pairs, accumulate failures, and assert on those totals. The many inner comparisons are not all individual counted assertions. One verified sweep recorded 649 completed passes and 829 abandoned attempts; those are results of its synthetic workload, not population-wide gameplay statistics.
+Traffic sweeps simulate races across the stored layouts. They compare car positions, accumulate violations, and assert on those totals; the inner comparisons are not all counted as separate assertions. One verified synthetic sweep recorded 649 completed passes and 829 abandoned attempts.
 
-Some progression scenarios force wins to exercise unlock paths. They establish rule correctness rather than proving that natural gameplay difficulty is balanced.
+Some progression scenarios force wins to reach later unlocks. Those checks verify progression rules, not whether the game’s natural difficulty is balanced.
 
-## Reproducibility and its limits
+## Repeating the run
 
-Race scenarios use explicit seeds with the custom SeededRandom generator. Strategy data and generated race inputs are retained for save/resume checks. The harness also tests rebuilding transient traffic after clearing the cache.
+The race scenarios supply explicit seeds to `SeededRandom`. Save/resume checks retain generated frames, strategy data, and traffic inputs. The harness also checks that rebuilding transient traffic after clearing its cache restores the expected progress.
 
-The verified run used optimized Swift compilation on an arm64 Mac with Apple Swift 6.4.2. Temporary file fixtures use incidental unique names. Cross-toolchain and cross-architecture bit-for-bit equivalence has not been established. Normal gameplay chooses new weekend seeds; a saved career retains generated results and inputs rather than a complete seed-only replay specification.
+The verified run used optimized compilation with Apple Swift 6.4.2 on an arm64 Mac. Temporary file fixtures have incidental unique names. Bit-for-bit equivalence across toolchains and architectures has not been established. In normal gameplay, weekends use new seeds and saves retain generated race data rather than a seed-only replay specification.
 
-The results describe the inspected application snapshot. Reproducing them requires the private sources and harness; future releases may change the assertion count.
+Reproducing the result requires the private sources and harness. The total describes that application snapshot and can change as the suite grows.
 
-## Performance evidence is separate
+## A separate performance check
 
-An existing synthetic traffic benchmark was recompiled against the inspected model. A single optimized run prepared a ten-car, 72-lap workload with five scheduled stops per car in **0.244 seconds** on the verification Mac; all cars completed the scheduled distance.
+An existing synthetic traffic benchmark was also compiled against the inspected models. In one optimized run on the verification Mac, a ten-car, 72-lap workload with five scheduled stops per car was prepared in **0.244 seconds**. Every car completed the scheduled distance.
 
-This measures model preparation for that synthetic input. It is not an iPhone benchmark, a sustained frame-rate measurement, a cold-start distribution, or a comparison establishing a speedup. Separate scenery rendering, saving, memory, thermal, and UI scheduling costs are outside that measurement.
+This is a local model-preparation measurement, not an iPhone rendering benchmark or evidence of a consistent frame rate. It does not measure scenery drawing, saving, UI scheduling, thermal behavior, or memory use, and it is not a controlled before/after speedup comparison.
 
-## What this suite does not establish
+## Gaps in the testing
 
-- AppleServices and ExpansionStore are not compiled into this harness. The cloud decision model and purchase progression policy checks are not transport or transaction integration tests.
-- There is no automated StoreKit refund/restore, CloudKit multi-device race, or Game Center account-switch suite here.
-- SwiftUI navigation, accessibility behavior, rendering appearance, lifecycle interruptions, and physical-device smoothness require separate checks.
-- No line/branch coverage metric, Thread Sanitizer result, device energy profile, or controlled long-running performance distribution is claimed.
-- Fail-fast execution does not provide the isolation or full failure reporting of a test framework.
+- `AppleServices` and `ExpansionStore` are not compiled into this harness. Testing cloud decision rules or purchase progression policy does not test the real CloudKit transport or StoreKit transactions.
+- There is no automated StoreKit refund/restore, multi-device CloudKit conflict, or Game Center account-switch suite here.
+- Navigation, accessibility, appearance, app interruptions, and device smoothness need separate UI and physical-device checks.
+- There is no reported line/branch coverage, Thread Sanitizer result, energy profile, or long-running performance distribution.
+- The harness stops at the first failure rather than isolating cases and reporting all failures like a test framework.
 
-Recommended next steps are service injection and fault tests, lifecycle/UI automation, CI for the private model suite, and device profiling. These are proposed improvements, not features represented as already implemented.
+Possible next steps include injectable services for failure tests, UI/lifecycle automation, CI for the private harness, and device profiling. These are improvements to work toward, not existing coverage.
