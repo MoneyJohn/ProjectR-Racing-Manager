@@ -1,0 +1,17 @@
+# Documentation-first showcase: ignore everything except explicitly reviewed files.
+# This is a guardrail, not a secret scanner. Forced additions can bypass it.
+*
+!.gitignore
+!README.md
+!docs/
+docs/*
+!docs/ARCHITECTURE.md
+!docs/TESTING.md
+!assets/
+assets/*
+!assets/app-icon.png
+!assets/screenshots/
+assets/screenshots/*
+!assets/screenshots/san-francisco-race.png
+!assets/screenshots/race-strategy.png
+!assets/screenshots/trichy-circuit.png
