@@ -4,8 +4,6 @@
 
 # ProjectR: Racing Manager
 
-I’m [John Money](https://github.com/MoneyJohn), a Computer Engineering student. ProjectR is my personal iOS racing management project, now available on the App Store. You run a racing team: choose a car and driver, plan tire stops, make calls during a race, and work through championships.
-
 **[Download ProjectR on the App Store](https://apps.apple.com/us/app/projectr-racing-manager/id6830888927)**
 
 <table>
@@ -36,9 +34,9 @@ There are **seven racing tours, 64 locations, and 322 scheduled race weekends**.
 
 ## How I worked on it
 
-I combined hands-on development with substantial AI-assisted coding. AI coding tools helped implement and revise parts of the app, and I also worked directly on implementation, feature decisions, testing, debugging, iteration, and release management. ProjectR has been a way for me to learn by building and maintaining something people can actually play.
+I developed ProjectR through a combination of hands-on programming and AI-assisted development. Throughout the process, I worked on feature design, implementation, debugging, testing, and refining the gameplay experience. The project has been an opportunity to strengthen my technical knowledge while taking an idea through to a published iOS application.
 
-For the initial release, I prioritized gameplay logic and functionality. I took the app through Xcode, TestFlight, and App Store release. I plan to keep improving the UI, animations, and gameplay in future updates.
+For the initial release, I focused primarily on gameplay logic and functionality. After developing and testing the app through Xcode and TestFlight, I released it on the App Store. I plan to continue improving the UI, animations, and gameplay through future updates.
 
 ## How it works
 
